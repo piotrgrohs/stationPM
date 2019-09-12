@@ -1,6 +1,8 @@
 #include <LiquidCrystal.h>
 #include "SdsDustSensor.h"
 #include "DHTesp.h"
+#include <Wire.h>
+#include "Adafruit_SHT31.h"
 #define DHTTYPE DHT22
 
 TaskHandle_t Task1;
@@ -13,16 +15,18 @@ class Sensor {
       String hum;
       
 };
+Adafruit_SHT31 sht31 = Adafruit_SHT31();
 Sensor sensor;
 DHTesp dht; 
-int dhtPin = 15;
-LiquidCrystal lcd(4,23,5,18,19,2);
+int dhtPin = 0;
+LiquidCrystal lcd(2,4,5,18,19,23);
 SdsDustSensor sds(Serial2);
 
 Sensor getTemperature() {
   TempAndHumidity newValues = dht.getTempAndHumidity();
-  sensor.temp = String(newValues.temperature);
-  sensor.hum = String(newValues.humidity);
+  sensor.temp = String(newValues.temperature,0);
+  sensor.hum = String(newValues.humidity,0);
+  sht31.begin(0x44);
   if (dht.getStatus() != 0) {
     sensor.stat = false;
 
@@ -37,7 +41,7 @@ void setup() {
   Serial2.begin(9600);
   dht.setup(dhtPin, DHTesp::DHT22);
   lcd.begin(16, 2);
-  lcd.print("Hello");
+  lcd.print("PM & TEMP/HUM");
   delay(3000);
   lcd.clear();
 
@@ -68,17 +72,25 @@ void setup() {
 void Task1code( void * pvParameters ){
   Serial.print("Task1 running on core ");
   Serial.println(xPortGetCoreID());
-
+  String t;
+  String h;
   for(;;){
+    t = String(sht31.readTemperature(),0);
+    h = String(sht31.readHumidity(),0);
     sensor = getTemperature();
     lcd.setCursor(0, 0);
-    Serial.println(sensor.temp+ " "+sensor.hum);
-    lcd.print("T:"+sensor.temp+" H:"+sensor.hum+"%");
+    lcd.print("T:");
+    lcd.print(sensor.temp);
+    lcd.print("/");
+    lcd.print(t);
+    lcd.print(" H:");
+    lcd.print(sensor.hum);
+    lcd.print("/");
+    lcd.print(h);
     delay(1000);
   } 
 }
 
-//Task2code: blinks an LED every 700 ms
 void Task2code( void * pvParameters ){
   Serial.print("Task2 running on core ");
   Serial.println(xPortGetCoreID());
@@ -86,7 +98,6 @@ void Task2code( void * pvParameters ){
   for(;;){
     sds.wakeup();
     delay(30000); // working 30 seconds
-    
     PmResult pm = sds.queryPm();
     if (pm.isOk()) {
       lcd.setCursor(0, 1);
